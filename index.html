@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Кооперативные Пазлы</title>
+    <style>
+        /* Блокируем любые фантомные выделения и перетаскивания картинок */
+        * {
+            user-select: none;
+            -webkit-user-drag: none;
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            /* Указываем ваш файл */
+            background-image: url('wood.jpg'); /* Название вашего файла */
+            background-repeat: repeat; /* Повторять текстуру по всей площади */
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            color: #ecf0f1;
+        }
+
+        /* Окно обзора (камера) */
+        #table-wrapper {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            overflow: hidden;
+            cursor: grab;
+        }
+        #table-wrapper:active { cursor: grabbing; }
+
+        /* Сам виртуальный стол (размером 4000x4000) */
+        #table {
+            position: absolute;
+            width: 4000px; height: 4000px;
+            transform-origin: 0 0;
+        }
+
+        #guide {
+            position: absolute;
+            opacity: 0.15;
+            pointer-events: none;
+            border: 2px dashed #a1887f;
+            z-index: 1;
+        }
+
+        .piece {
+            position: absolute;
+            cursor: pointer;
+            z-index: 10;
+            /* Легкая тень создает эффект объема, заменяя жесткую рамку */
+            filter: drop-shadow(2px 2px 3px rgba(0,0,0,0.5));
+            touch-action: none;
+        }
+        .piece.dragging {
+            filter: drop-shadow(6px 6px 8px rgba(0,0,0,0.8));
+            z-index: 9999 !important;
+        }
+
+        /* КУРСОРЫ ДРУГИХ ИГРОКОВ */
+        .remote-cursor {
+            position: absolute;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 100000;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 0 2px #ffffff, 0 2px 5px rgba(0,0,0,0.5);
+            transition: left 0.05s linear, top 0.05s linear;
+        }
+
+        /* ДИНАМИЧЕСКАЯ ИГРОВАЯ ПАНЕЛЬ */
+        #ui-panel {
+            background: rgba(27, 18, 14, 0.95);
+            border-radius: 12px; 
+            z-index: 10000;
+            border: 2px solid #8d6e63;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+            transition: all 0.4s ease;
+        }
+
+        /* Состояние: Ожидание начала игры */
+        #ui-panel.waiting {
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 380px;
+            padding: 30px;
+            text-align: center;
+        }
+        #ui-panel.waiting h2 { margin-top: 0; margin-bottom: 20px; }
+
+        /* Состояние: Идет игра */
+        #ui-panel.playing {
+            position: absolute; 
+            top: 15px; left: 15px;
+            width: 280px;
+            padding: 15px;
+        }
+
+        h2 { margin: 0 0 10px 0; font-size: 18px; color: #d7ccc8; }
+        .control-group { margin-bottom: 15px; display: flex; justify-content: center; gap: 15px;}
+        label { display: block; font-size: 14px; margin-bottom: 5px; }
+        input[type="number"] { width: 50px; background: #3e2723; color: white; border: 1px solid #795548; padding: 4px; border-radius: 4px; text-align: center;}
+        
+        /* КРАСИВАЯ КНОПКА ЗАГРУЗКИ */
+        .file-upload-btn {
+            display: inline-block;
+            background: #5d4037;
+            border: 1px solid #795548;
+            color: #fff;
+            padding: 10px 15px;
+            border-radius: 6px;
+            cursor: pointer;
+            width: 100%;
+            margin-bottom: 5px;
+            transition: background 0.2s;
+        }
+        .file-upload-btn:hover { background: #6d4c41; }
+        #file-name { font-size: 12px; color: #bcaaa4; margin-bottom: 15px; word-break: break-all; }
+
+        button { background: #4caf50; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; width: 100%; font-weight: bold; transition: 0.2s;}
+        button:hover { background: #45a049; }
+        #status { margin-top: 10px; font-size: 12px; color: #8bc34a; }
+    </style>
+</head>
+<body>
+
+    <div id="table-wrapper">
+        <div id="table">
+            <img id="guide">
+        </div>
+    </div>
+    
+    <div id="ui-panel" class="waiting">
+        <h2>КООПЕРАТИВНЫЕ ПАЗЛЫ</h2>
+        <div id="status">🔴 Подключение...</div>
+        
+        <div id="setup-section">
+            <hr style="border-color:#555; margin:15px 0;">
+            
+            <label for="imageInput" class="file-upload-btn">🖼️ Выбрать изображение</label>
+            <input type="file" id="imageInput" accept="image/*" style="display: none;">
+            <div id="file-name">Файл не выбран</div>
+
+            <div class="control-group">
+                <label>Колонки: <input type="number" id="cols" value="6" min="2"></label>
+                <label>Строки: <input type="number" id="rows" value="4" min="2"></label>
+            </div>
+            <button onclick="startGame()">Нарезать и начать</button>
+        </div>
+        
+        <div id="playing-section" style="display: none; margin-top: 15px;">
+            <button onclick="resetGame()" style="background:#b71c1c;">Завершить игру</button>
+        </div>
+    </div>
+
+    <script>
+        let ws;
+        let gameState = { status: 'waiting', pieces: {}, tabs: {h:[], v:[]} };
+        let cachedImage = new Image();
+        
+        // Переменные для перетаскивания и камеры (стола)
+        let draggingGroup = null;
+        let isPanning = false;
+        let tableX = 0, tableY = 0;
+        let dragStartX = 0, dragStartY = 0;
+        let initialPiecePositions = {}; 
+        let lastSendTime = 0;
+        let lastCursorSend = 0; // Для отправки курсора
+
+        // ═══════════════════════════════════════════════════════════
+        // МОДУЛЬ ЗВУКОВЫХ ЭФФЕКТОВ (Web Audio API)
+        // ═══════════════════════════════════════════════════════════
+        let audioCtx = null;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        // Звук взятия детальки (короткий мягкий клик)
+        function playPickSound() {
+            initAudio();
+            const ctx = audioCtx;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(550, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(300, ctx.currentTime + 0.04);
+
+            gain.gain.setValueAtTime(0.08, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.04);
+
+            osc.start();
+            osc.stop(ctx.currentTime + 0.04);
+        }
+
+        // Звук соединения деталей (плотный деревянный щелчок)
+        function playSnapSound() {
+            initAudio();
+            const ctx = audioCtx;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(160, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(70, ctx.currentTime + 0.08);
+
+            gain.gain.setValueAtTime(0.3, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+
+            osc.start();
+            osc.stop(ctx.currentTime + 0.08);
+        }
+
+        // Победительный аккорд
+        function playWinSound() {
+            initAudio();
+            const ctx = audioCtx;
+            const notes = [523.25, 659.25, 783.99, 1046.50]; // Аккорд C-major (До-Ми-Соль-До)
+            
+            notes.forEach((freq, index) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, ctx.currentTime + index * 0.08);
+
+                gain.gain.setValueAtTime(0.1, ctx.currentTime + index * 0.08);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + index * 0.08 + 0.4);
+
+                osc.start(ctx.currentTime + index * 0.08);
+                osc.stop(ctx.currentTime + index * 0.08 + 0.4);
+            });
+        }
+
+        // Обновление имени файла
+        document.getElementById('imageInput').addEventListener('change', function() {
+            const name = this.files[0] ? this.files[0].name : 'Файл не выбран';
+            document.getElementById('file-name').textContent = name;
+        });
+
+        function connect() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${protocol}//${window.location.host}`);
+            
+            ws.onopen = () => document.getElementById('status').innerHTML = '🟢 Подключено (можно играть)';
+            ws.onclose = () => {
+                document.getElementById('status').innerHTML = '🔴 Отключено...';
+                setTimeout(connect, 2000);
+            };
+            ws.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                if (msg.type === 'fullState') {
+                    gameState = msg.state;
+                    if (gameState.status === 'playing') {
+                        cachedImage.onload = () => renderFullState();
+                        cachedImage.src = gameState.image;
+                    } else {
+                        renderFullState();
+                    }
+                } 
+                else if (msg.type === 'piecesUpdate') {
+                    let remoteSnapped = false;
+                    msg.pieces.forEach(p => {
+                        if (draggingGroup !== p.group) {
+                            // Если на сервере группа поменялась (кто-то соединил детали), помечаем для звука
+                            if (gameState.pieces[p.id] && gameState.pieces[p.id].group !== p.group) {
+                                remoteSnapped = true;
+                            }
+                            gameState.pieces[p.id] = p;
+                            updatePieceDOM(p.id);
+                        }
+                    });
+                    // Воспроизводим звук соединения, если его совершил другой игрок
+                    if (remoteSnapped) playSnapSound();
+                }
+                else if (msg.type === 'cursorUpdate') {
+                    let cursorEl = document.getElementById('cursor-' + msg.id);
+                    if (!cursorEl) {
+                        cursorEl = document.createElement('div');
+                        cursorEl.id = 'cursor-' + msg.id;
+                        cursorEl.className = 'remote-cursor';
+                        cursorEl.style.backgroundColor = msg.color;
+                        document.getElementById('table').appendChild(cursorEl);
+                    }
+                    cursorEl.style.left = msg.x + 'px';
+                    cursorEl.style.top = msg.y + 'px';
+                } 
+                else if (msg.type === 'cursorRemove') {
+                    const cursorEl = document.getElementById('cursor-' + msg.id);
+                    if (cursorEl) cursorEl.remove();
+                }
+            };
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // ГЕНЕРАЦИЯ И СТАРТ
+        // ═══════════════════════════════════════════════════════════
+        function startGame() {
+            const file = document.getElementById('imageInput').files[0];
+            if (!file) return alert('Выберите картинку!');
+            
+            const cols = parseInt(document.getElementById('cols').value);
+            const rows = parseInt(document.getElementById('rows').value);
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    let w = img.width, h = img.height;
+                    
+                    const maxW = 1200, maxH = 800;
+                    if (w > maxW || h > maxH) {
+                        const ratio = Math.min(maxW / w, maxH / h);
+                        w = Math.floor(w * ratio); h = Math.floor(h * ratio);
+                    }
+                    
+                    canvas.width = w; canvas.height = h;
+                    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                    const imageBase64 = canvas.toDataURL('image/jpeg', 0.85);
+                    
+                    const tabs = { h: [], v: [] };
+                    for(let r=0; r<rows-1; r++) {
+                        tabs.h[r] = [];
+                        for(let c=0; c<cols; c++) tabs.h[r].push(Math.random() > 0.5 ? 1 : -1);
+                    }
+                    for(let r=0; r<rows; r++) {
+                        tabs.v[r] = [];
+                        for(let c=0; c<cols-1; c++) tabs.v[r].push(Math.random() > 0.5 ? 1 : -1);
+                    }
+
+                    const initialPieces = {};
+                    let idCount = 0;
+                    
+                    const startX = 2000 - w/2;
+                    const startY = 2000 + h/2 + 50; 
+                    
+                    for(let r = 0; r < rows; r++) {
+                        for(let c = 0; c < cols; c++) {
+                            initialPieces[idCount] = {
+                                id: idCount, c: c, r: r, group: idCount,
+                                x: startX - 200 + Math.random() * (w + 400),
+                                y: startY + Math.random() * 600
+                            };
+                            idCount++;
+                        }
+                    }
+                    
+                    send({
+                        type: 'initGame', image: imageBase64, 
+                        width: w, height: h, cols: cols, rows: rows, 
+                        pieces: initialPieces, tabs: tabs
+                    });
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function resetGame() { send({ type: 'resetGame' }); }
+        function send(msg) { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); }
+
+        // ═══════════════════════════════════════════════════════════
+        // ОТРИСОВКА (CANVAS + ФОРМА ПАЗЛОВ)
+        // ═══════════════════════════════════════════════════════════
+        function renderFullState() {
+            const panel = document.getElementById('ui-panel');
+            if (gameState.status === 'playing') {
+                panel.className = 'playing';
+                document.getElementById('setup-section').style.display = 'none';
+                document.getElementById('playing-section').style.display = 'block';
+                
+                tableX = window.innerWidth / 2 - 2000;
+                tableY = window.innerHeight / 2 - 2000;
+                document.getElementById('table').style.transform = `translate(${tableX}px, ${tableY}px)`;
+
+                const guide = document.getElementById('guide');
+                guide.src = gameState.image;
+                guide.style.width = gameState.width + 'px'; guide.style.height = gameState.height + 'px';
+                guide.style.left = (2000 - gameState.width / 2) + 'px';
+                guide.style.top = (2000 - gameState.height / 2) + 'px';
+                
+                document.querySelectorAll('.piece').forEach(el => el.remove());
+                for (let id in gameState.pieces) updatePieceDOM(id);
+            } else {
+                panel.className = 'waiting';
+                document.getElementById('setup-section').style.display = 'block';
+                document.getElementById('playing-section').style.display = 'none';
+                document.querySelectorAll('.piece, .remote-cursor').forEach(el => el.remove());
+                document.getElementById('guide').removeAttribute('src');
+                document.getElementById('file-name').textContent = 'Файл не выбран';
+                document.getElementById('imageInput').value = '';
+            }
+        }
+
+        function drawPuzzleEdge(ctx, x1, y1, x2, y2, sign, tabSize) {
+            if (sign === 0) { ctx.lineTo(x2, y2); return; }
+            
+            const dx = x2 - x1, dy = y2 - y1;
+            const len = Math.hypot(dx, dy);
+            const angle = Math.atan2(dy, dx);
+            
+            ctx.save();
+            ctx.translate(x1, y1);
+            ctx.rotate(angle);
+            
+            const mid = len / 2;
+            const ts = tabSize;
+            
+            ctx.lineTo(mid - ts * 0.8, 0);
+            ctx.bezierCurveTo(mid - ts * 0.5, 0, mid - ts * 0.4, sign * ts * 0.3, mid - ts * 0.4, sign * ts * 0.5);
+            ctx.bezierCurveTo(mid - ts * 0.4, sign * ts * 1.1, mid + ts * 0.4, sign * ts * 1.1, mid + ts * 0.4, sign * ts * 0.5);
+            ctx.bezierCurveTo(mid + ts * 0.4, sign * ts * 0.3, mid + ts * 0.5, 0, mid + ts * 0.8, 0);
+            ctx.lineTo(len, 0);
+            
+            ctx.restore();
+        }
+
+        function updatePieceDOM(id) {
+            let el = document.getElementById('piece-' + id);
+            const piece = gameState.pieces[id];
+            
+            const pw = gameState.width / gameState.cols;
+            const ph = gameState.height / gameState.rows;
+            const tabSize = Math.min(pw, ph) * 0.25;
+            
+            if (!el) {
+                el = document.createElement('canvas');
+                el.id = 'piece-' + id;
+                el.className = 'piece';
+                
+                el.width = pw + 2 * tabSize;
+                el.height = ph + 2 * tabSize;
+                
+                const ctx = el.getContext('2d');
+                const c = piece.c, r = piece.r;
+                
+                const topTab = (r === 0) ? 0 : -gameState.tabs.h[r-1][c];
+                const bottomTab = (r === gameState.rows - 1) ? 0 : gameState.tabs.h[r][c];
+                const leftTab = (c === 0) ? 0 : -gameState.tabs.v[r][c-1];
+                const rightTab = (c === gameState.cols - 1) ? 0 : gameState.tabs.v[r][c];
+                
+                ctx.beginPath();
+                ctx.moveTo(tabSize, tabSize);
+                drawPuzzleEdge(ctx, tabSize, tabSize, tabSize + pw, tabSize, topTab, tabSize);
+                drawPuzzleEdge(ctx, tabSize + pw, tabSize, tabSize + pw, tabSize + ph, rightTab, tabSize);
+                drawPuzzleEdge(ctx, tabSize + pw, tabSize + ph, tabSize, tabSize + ph, bottomTab, tabSize);
+                drawPuzzleEdge(ctx, tabSize, tabSize + ph, tabSize, tabSize, leftTab, tabSize);
+                ctx.closePath();
+                ctx.clip();
+                
+                ctx.drawImage(cachedImage, -c * pw + tabSize, -r * ph + tabSize, gameState.width, gameState.height);
+                
+                el.onpointerdown = (e) => {
+                    e.preventDefault();
+                    startDraggingPiece(e, id);
+                };
+                document.getElementById('table').appendChild(el);
+            }
+            
+            el.style.left = (piece.x - tabSize) + 'px';
+            el.style.top = (piece.y - tabSize) + 'px';
+            el.style.zIndex = piece.group + 10;
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // УПРАВЛЕНИЕ: КАМЕРА И ПАЗЛЫ
+        // ═══════════════════════════════════════════════════════════
+        document.getElementById('table-wrapper').onpointerdown = (e) => {
+            if (e.target.id === 'table-wrapper' || e.target.id === 'table' || e.target.id === 'guide') {
+                isPanning = true;
+                dragStartX = e.clientX; dragStartY = e.clientY;
+                document.body.setPointerCapture(e.pointerId);
+            }
+        };
+
+        function startDraggingPiece(e, id) {
+            if (gameState.status !== 'playing') return;
+            
+            playPickSound(); // Звук при поднятии пазла
+            
+            const piece = gameState.pieces[id];
+            draggingGroup = piece.group;
+            dragStartX = e.clientX; dragStartY = e.clientY;
+            initialPiecePositions = {};
+
+            for (let key in gameState.pieces) {
+                if (gameState.pieces[key].group === draggingGroup) {
+                    initialPiecePositions[key] = { x: gameState.pieces[key].x, y: gameState.pieces[key].y };
+                    document.getElementById('piece-'+key).classList.add('dragging');
+                }
+            }
+            document.body.setPointerCapture(e.pointerId);
+        }
+
+        document.addEventListener('pointermove', (e) => {
+            const dx = e.clientX - dragStartX;
+            const dy = e.clientY - dragStartY;
+
+            if (isPanning) {
+                tableX += dx; tableY += dy;
+                dragStartX = e.clientX; dragStartY = e.clientY;
+                document.getElementById('table').style.transform = `translate(${tableX}px, ${tableY}px)`;
+            } 
+            else if (draggingGroup !== null) {
+                for (let key in initialPiecePositions) {
+                    gameState.pieces[key].x = initialPiecePositions[key].x + dx;
+                    gameState.pieces[key].y = initialPiecePositions[key].y + dy;
+                    updatePieceDOM(key);
+                }
+                const now = Date.now();
+                if (now - lastSendTime > 50) {
+                    sendGroupUpdate();
+                    lastSendTime = now;
+                }
+            }
+
+            if (ws && ws.readyState === WebSocket.OPEN && gameState.status === 'playing') {
+                const now = Date.now();
+                if (now - lastCursorSend > 40) { 
+                    const localX = e.clientX - tableX;
+                    const localY = e.clientY - tableY;
+                    ws.send(JSON.stringify({ type: 'cursorMove', x: localX, y: localY }));
+                    lastCursorSend = now;
+                }
+            }
+        });
+
+        document.addEventListener('pointerup', (e) => {
+            isPanning = false;
+            
+            if (draggingGroup !== null) {
+                const pw = gameState.width / gameState.cols;
+                const ph = gameState.height / gameState.rows;
+                const snapThreshold = 30;
+                
+                let snapped = false;
+                let snapDx = 0, snapDy = 0;
+                let targetGroup = null;
+
+                for (let dragKey in initialPiecePositions) {
+                    const dragPiece = gameState.pieces[dragKey];
+                    for (let statKey in gameState.pieces) {
+                        const statPiece = gameState.pieces[statKey];
+                        if (dragPiece.group === statPiece.group) continue;
+
+                        const colDiff = statPiece.c - dragPiece.c;
+                        const rowDiff = statPiece.r - dragPiece.r;
+
+                        if (Math.abs(colDiff) + Math.abs(rowDiff) === 1) {
+                            const idealDx = colDiff * pw;
+                            const idealDy = rowDiff * ph;
+                            const actualDx = statPiece.x - dragPiece.x;
+                            const actualDy = statPiece.y - dragPiece.y;
+
+                            if (Math.abs(actualDx - idealDx) < snapThreshold && Math.abs(actualDy - idealDy) < snapThreshold) {
+                                snapDx = (statPiece.x - idealDx) - dragPiece.x;
+                                snapDy = (statPiece.y - idealDy) - dragPiece.y;
+                                targetGroup = statPiece.group;
+                                snapped = true; break;
+                            }
+                        }
+                    }
+                    if (snapped) break;
+                }
+
+                if (snapped) {
+                    playSnapSound(); // Звук соединения деталей у текущего игрока
+                    for (let key in initialPiecePositions) {
+                        gameState.pieces[key].x += snapDx;
+                        gameState.pieces[key].y += snapDy;
+                        gameState.pieces[key].group = targetGroup; 
+                    }
+                }
+
+                sendGroupUpdate();
+
+                for (let key in initialPiecePositions) {
+                    const el = document.getElementById('piece-'+key);
+                    el.classList.remove('dragging');
+                    el.style.zIndex = gameState.pieces[key].group + 10;
+                }
+
+                draggingGroup = null;
+                document.body.releasePointerCapture(e.pointerId);
+
+                if (snapped) {
+                    const uniqueGroups = new Set(Object.values(gameState.pieces).map(p => p.group));
+                    if (uniqueGroups.size === 1) {
+                        setTimeout(() => {
+                            playWinSound(); // Торжественный звук победы!
+                            alert('🎉 Пазл собран! 🎉');
+                        }, 200);
+                    }
+                }
+            }
+        });
+
+        function sendGroupUpdate() {
+            send({
+                type: 'updatePieces',
+                pieces: Object.keys(initialPiecePositions).map(k => gameState.pieces[k])
+            });
+        }
+
+        connect();
+    </script>
+</body>
+</html>
