@@ -3,18 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Кооперативные Пазлы (P2P)</title>
+    <title>Кооперативные Пазлы</title>
     <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
     <style>
         * { user-select: none; -webkit-user-drag: none; box-sizing: border-box; }
 
         body {
-            margin: 0;
-            overflow: hidden;
-            background-image: url('wood.jpg'); 
-            background-repeat: repeat; 
-            font-family: 'Segoe UI', Tahoma, sans-serif;
-            color: #ecf0f1;
+            margin: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, sans-serif; color: #ecf0f1;
+            background-image: url('wood.jpg'); background-repeat: repeat; 
+            background-color: #3e2723; 
         }
 
         #table-wrapper { position: absolute; top: 0; left: 0; right: 0; bottom: 0; overflow: hidden; cursor: grab; }
@@ -37,14 +34,17 @@
             border: 2px solid #8d6e63; box-shadow: 0 10px 30px rgba(0,0,0,0.6); transition: all 0.4s ease;
         }
         #ui-panel.waiting { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 380px; padding: 30px; text-align: center; }
-        #ui-panel.waiting h2 { margin-top: 0; margin-bottom: 20px; }
         #ui-panel.playing { position: absolute; top: 15px; left: 15px; width: 280px; padding: 15px; }
 
         h2 { margin: 0 0 10px 0; font-size: 18px; color: #d7ccc8; }
         .control-group { margin-bottom: 15px; display: flex; justify-content: center; gap: 15px;}
         label { display: block; font-size: 14px; margin-bottom: 5px; }
-        input[type="number"] { width: 50px; background: #3e2723; color: white; border: 1px solid #795548; padding: 4px; border-radius: 4px; text-align: center;}
-        input[type="text"] { background: #3e2723; color: white; border: 1px solid #795548; padding: 8px; border-radius: 4px; }
+        
+        input[type="number"], input[type="text"] { 
+            background: #3e2723; color: white; border: 1px solid #795548; padding: 6px; border-radius: 4px; text-align: center;
+        }
+        input[type="text"] { width: 100%; margin-bottom: 10px; }
+        input[type="number"] { width: 50px; }
         
         .file-upload-btn {
             display: inline-block; background: #5d4037; border: 1px solid #795548; color: #fff;
@@ -55,10 +55,11 @@
 
         button { background: #4caf50; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; width: 100%; font-weight: bold; transition: 0.2s;}
         button:hover { background: #45a049; }
-        #status { margin-top: 10px; font-size: 14px; color: #8bc34a; line-height: 1.4; margin-bottom: 10px; }
+        .host-btn { background: #2980b9; margin-bottom: 15px; }
+        .host-btn:hover { background: #2471a3; }
         
-        .connect-btn { background: #2e7d32; margin-bottom: 10px; }
-        .join-btn { background: #1565c0; width: auto; }
+        #status { margin-top: 10px; font-size: 14px; color: #8bc34a; margin-bottom: 15px; }
+        #room-badge { display: none; margin-bottom: 15px; padding: 10px; background: #2c3e50; border-radius: 4px; font-size: 14px; border: 1px dashed #7f8c8d; }
     </style>
 </head>
 <body>
@@ -72,17 +73,19 @@
     <div id="ui-panel" class="waiting">
         <h2>КООПЕРАТИВНЫЕ ПАЗЛЫ</h2>
         <div id="status">Загрузка сети...</div>
+        <div id="room-badge">ID Вашей комнаты:<br><strong id="current-room-name" style="color: #f1c40f; font-size: 18px; user-select: text;"></strong></div>
         
-        <div id="connection-section">
-            <button class="connect-btn" onclick="createRoom()">🏠 Создать комнату (Хост)</button>
-            <div style="display: flex; gap: 8px; margin-top: 5px;">
-                <input type="text" id="roomCodeInput" placeholder="ID комнаты друга" style="flex: 1;">
-                <button class="join-btn" onclick="joinRoom()">🔌 Войти</button>
+        <div id="room-section" style="display: none;">
+            <button class="host-btn" onclick="createRoom()">🏠 Создать комнату (Стать Хостом)</button>
+            <div style="border-top: 1px solid #555; margin: 10px 0; padding-top: 15px;">
+                <input type="text" id="roomIdInput" placeholder="Введите ID комнаты друга">
+                <button onclick="joinRoom()">🔌 Войти в комнату</button>
             </div>
         </div>
 
         <div id="setup-section" style="display: none;">
             <hr style="border-color:#555; margin:15px 0;">
+            <div style="font-size: 12px; color: #aaa; margin-bottom: 10px;">Ждите, пока друзья подключатся, затем выберите картинку.</div>
             
             <label for="imageInput" class="file-upload-btn">🖼️ Выбрать изображение</label>
             <input type="file" id="imageInput" accept="image/*" style="display: none;">
@@ -99,28 +102,29 @@
                 <label>Колонки: <input type="number" id="cols" value="6" min="2"></label>
                 <label>Строки: <input type="number" id="rows" value="4" min="2"></label>
             </div>
-            <button onclick="startGame()">Нарезать и начать для всех</button>
+            <button onclick="startGame()">Нарезать и начать</button>
         </div>
         
         <div id="playing-section" style="display: none; margin-top: 15px;">
-            <button onclick="resetGame()" style="background:#b71c1c;">Завершить игру</button>
+            <button id="resetBtn" onclick="resetGame()" style="background:#b71c1c;">Завершить игру</button>
         </div>
     </div>
 
     <script>
-        // СЕTEВЫЕ ПЕРЕМЕННЫЕ P2P
+        // СЕТЕВЫЕ ПЕРЕМЕННЫЕ P2P
         let peer = null;
         let isHost = false;
-        let hostConnection = null;       // Соединение клиента с хостом
-        let clientConnections = [];     // Список всех подключенных гостей (для хоста)
+        let hostConnection = null;       // Соединение гостя с хостом
+        let clientConnections = [];      // Соединения хоста с гостями
         
+        const myClientId = Math.random().toString(36).substring(2, 9);
         const colors = ['#e74c3c', '#2ecc71', '#3498db', '#f1c40f', '#9b59b6', '#1abc9c', '#e67e22', '#e84393', '#00d2d3'];
-        let myColor = colors[Math.floor(Math.random() * colors.length)];
-        let myClientId = 'host';
+        const myColor = colors[Math.floor(Math.random() * colors.length)];
 
         // ИГРОВЫЕ ПЕРЕМЕННЫЕ
         let gameState = { status: 'waiting', pieces: {}, tabs: {h:[], v:[]}, showGuide: true };
         let cachedImage = new Image();
+        let currentRoomId = null; 
         
         let draggingGroup = null;
         let isPanning = false;
@@ -130,7 +134,7 @@
         let lastSendTime = 0;
         let lastCursorSend = 0; 
 
-        // Web Audio API
+        // АУДИО
         let audioCtx = null;
         function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
 
@@ -167,117 +171,128 @@
         });
 
         // ═══════════════════════════════════════════════════════════
-        // СЕТЕВАЯ ЛОГИКА PEERJS (P2P)
+        // ИНИЦИАЛИЗАЦИЯ И СЕТЕВАЯ ЛОГИКА P2P
         // ═══════════════════════════════════════════════════════════
 
-        // Инициализация комнаты хостом
+        // Стартовая настройка интерфейса
+        document.getElementById('status').innerHTML = '👋 Выберите режим игры:';
+        document.getElementById('room-section').style.display = 'block';
+
+        // Создание комнаты (Хост)
         function createRoom() {
             isHost = true;
-            myClientId = 'host';
             document.getElementById('status').innerHTML = 'Создание комнаты...';
+            document.getElementById('room-section').style.display = 'none';
             
-            peer = new Peer();
+            // Генерируем короткий ID из 5 цифр для удобства
+            const roomId = Math.floor(10000 + Math.random() * 90000).toString();
+            peer = new Peer('puzzle-room-' + roomId);
             
             peer.on('open', (id) => {
-                document.getElementById('status').innerHTML = `🟢 Комната создана!<br>ID: <strong style="color:#fff; background:#5d4037; padding:3px 6px; border-radius:4px; font-size:16px;">${id}</strong><br><span style="font-size:11px; color:#aaa;">Отправьте этот ID друзьям для подключения</span>`;
-                document.getElementById('connection-section').style.display = 'none';
+                currentRoomId = roomId;
+                document.getElementById('status').innerHTML = '🟢 Комната активна! Ожидание игроков...';
+                document.getElementById('room-badge').style.display = 'block';
+                document.getElementById('current-room-name').textContent = currentRoomId;
                 document.getElementById('setup-section').style.display = 'block';
             });
 
             peer.on('connection', (conn) => {
                 clientConnections.push(conn);
                 
-                // Назначаем гостю ID и случайный цвет (как это делал server.js)
-                conn.clientId = Math.random().toString(36).substring(2, 9);
-                conn.clientColor = colors[Math.floor(Math.random() * colors.length)];
+                // Назначаем гостю ID и случайный цвет (эмуляция сервера)
+                conn.guestId = Math.random().toString(36).substring(2, 9);
+                conn.guestColor = colors[Math.floor(Math.random() * colors.length)];
 
-                // Сразу отправляем текущее состояние игры новому игроку
+                // Отправляем гостю текущее состояние игры
                 conn.send({ type: 'fullState', state: gameState });
 
                 conn.on('data', (data) => {
-                    handleHostMessage(conn, data);
+                    handleMessageOnHost(conn.guestId, conn.guestColor, data);
                 });
 
                 conn.on('close', () => {
                     clientConnections = clientConnections.filter(c => c !== conn);
-                    broadcast({ type: 'cursorRemove', id: conn.clientId });
-                    const cursorEl = document.getElementById('cursor-' + conn.clientId);
+                    broadcastToGuests({ type: 'cursorRemove', id: conn.guestId });
+                    const cursorEl = document.getElementById('cursor-' + conn.guestId);
                     if (cursorEl) cursorEl.remove();
                 });
             });
+
+            peer.on('error', (err) => {
+                alert('Ошибка создания комнаты. Возможно ID занят, попробуйте еще раз.');
+                location.reload();
+            });
         }
 
-        // Подключение к комнате в качестве гостя
+        // Подключение к комнате (Гость)
         function joinRoom() {
-            const targetId = document.getElementById('roomCodeInput').value.trim();
-            if (!targetId) return alert('Введите ID комнаты!');
+            const id = document.getElementById('roomIdInput').value.trim();
+            if (!id) return alert('Введите ID комнаты!');
             
             isHost = false;
-            myClientId = Math.random().toString(36).substring(2, 9);
             document.getElementById('status').innerHTML = 'Подключение к хосту...';
+            document.getElementById('room-section').style.display = 'none';
             
             peer = new Peer();
             
-            peer.on('open', (id) => {
-                hostConnection = peer.connect(targetId);
+            peer.on('open', () => {
+                hostConnection = peer.connect('puzzle-room-' + id);
                 
                 hostConnection.on('open', () => {
-                    document.getElementById('status').innerHTML = '🟢 Подключено к хосту! Ожидайте начала игры...';
-                    document.getElementById('connection-section').style.display = 'none';
+                    currentRoomId = id;
+                    document.getElementById('status').innerHTML = '🟢 Успешно! Ожидайте запуска игры хостом.';
+                    document.getElementById('room-badge').style.display = 'block';
+                    document.getElementById('current-room-name').textContent = currentRoomId;
+                    document.getElementById('resetBtn').style.display = 'none'; // Гость не может завершить игру
                 });
                 
-                hostConnection.on('data', (data) => {
-                    handleClientMessage(data);
+                hostConnection.on('data', (msg) => {
+                    handleMessageOnClient(msg);
                 });
                 
                 hostConnection.on('close', () => {
-                    document.getElementById('status').innerHTML = '🔴 Хост разорвал соединение.';
+                    document.getElementById('status').innerHTML = '🔴 Связь с хостом потеряна.';
                     setTimeout(() => { location.reload(); }, 3000);
                 });
             });
 
             peer.on('error', (err) => {
-                alert('Ошибка подключения! Проверьте ID комнаты.');
-                document.getElementById('status').innerHTML = '👋 Выберите режим:';
+                alert('Комната не найдена или недоступна!');
+                location.reload();
             });
         }
 
-        // Функция отправки сообщений во всю сеть
-        function broadcast(message) {
-            const data = JSON.stringify(message); // Обеспечиваем текстовую сериализацию
-            clientConnections.forEach(conn => {
-                if (conn.open) conn.send(message);
-            });
-        }
-
-        // Функция рассылки всем, кроме одного (исключая отправителя)
-        function broadcastExcept(exceptClientId, message) {
-            clientConnections.forEach(conn => {
-                if (conn.open && conn.clientId !== exceptClientId) {
-                    conn.send(message);
-                }
-            });
-        }
-
-        // Универсальная функция отправки данных наверх
+        // Универсальная отправка
         function send(msg) {
             if (isHost) {
-                // Если хост совершает действие — обрабатываем его на месте локально и рассылаем всем
-                handleHostMessage({ clientId: 'host', clientColor: myColor }, msg);
+                // Хост обрабатывает сообщение локально и рассылает всем
+                handleMessageOnHost('host', myColor, msg);
             } else {
-                // Если гость — пересылаем хосту
+                // Гость отправляет данные хосту
                 if (hostConnection && hostConnection.open) {
                     hostConnection.send(msg);
                 }
             }
         }
 
+        function broadcastToGuests(message) {
+            clientConnections.forEach(conn => {
+                if (conn.open) conn.send(message);
+            });
+        }
+
+        function broadcastToGuestsExcept(exceptId, message) {
+            clientConnections.forEach(conn => {
+                if (conn.open && conn.guestId !== exceptId) conn.send(message);
+            });
+        }
+
         // ═══════════════════════════════════════════════════════════
-        // МАРШРУТИЗАЦИЯ И СИНХРОНИЗАЦИЯ СОСТОЯНИЙ (БЫВШИЙ SERVER.JS)
+        // ОБРАБОТКА ДАННЫХ (ЗАМЕНА СЕРВЕРНОЙ ЛОГИКИ)
         // ═══════════════════════════════════════════════════════════
 
-        // Обработчик событий на стороне ХОСТА (Эмуляция сервера)
-        function handleHostMessage(sender, msg) {
+        // Хост выступает в роли сервера (бывший ws.on('message'))
+        function handleMessageOnHost(senderId, senderColor, msg) {
             if (msg.type === 'initGame') {
                 gameState.status = 'playing';
                 gameState.image = msg.image;
@@ -289,8 +304,8 @@
                 gameState.tabs = msg.tabs;
                 gameState.showGuide = msg.showGuide;
                 
-                processFullState(gameState);
-                broadcast({ type: 'fullState', state: gameState });
+                processStateUpdate(gameState);
+                broadcastToGuests({ type: 'fullState', state: gameState });
             } 
             else if (msg.type === 'updatePieces') {
                 msg.pieces.forEach(p => {
@@ -301,7 +316,7 @@
                     }
                 });
 
-                if (sender.clientId !== 'host') {
+                if (senderId !== 'host') {
                     let remoteSnapped = false;
                     msg.pieces.forEach(p => {
                         if (draggingGroup !== p.group) {
@@ -313,31 +328,32 @@
                     if (remoteSnapped) playSnapSound();
                 }
 
-                broadcastExcept(sender.clientId, { type: 'piecesUpdate', pieces: msg.pieces });
+                broadcastToGuestsExcept(senderId, { type: 'piecesUpdate', pieces: msg.pieces });
             }
             else if (msg.type === 'resetGame') {
                 gameState = { status: 'waiting', pieces: {}, tabs: {h:[], v:[]}, showGuide: true };
-                processFullState(gameState);
-                broadcast({ type: 'fullState', state: gameState });
+                processStateUpdate(gameState);
+                broadcastToGuests({ type: 'fullState', state: gameState });
             }
             else if (msg.type === 'cursorMove') {
-                broadcastExcept(sender.clientId, {
+                broadcastToGuestsExcept(senderId, {
                     type: 'cursorUpdate',
-                    id: sender.clientId,
-                    color: sender.clientColor,
+                    id: senderId,
+                    color: senderColor,
                     x: msg.x,
                     y: msg.y
                 });
-                if (sender.clientId !== 'host') {
-                    updateRemoteCursor(sender.clientId, sender.clientColor, msg.x, msg.y);
+                // Отрисовываем курсор гостя у хоста
+                if (senderId !== 'host') {
+                    updateRemoteCursor(senderId, senderColor, msg.x, msg.y);
                 }
             }
         }
 
-        // Обработчик событий на стороне КЛИЕНТА (Получение обновлений от хоста)
-        function handleClientMessage(msg) {
+        // Гость принимает команды от хоста (бывший ws.onmessage)
+        function handleMessageOnClient(msg) {
             if (msg.type === 'fullState') {
-                processFullState(msg.state);
+                processStateUpdate(msg.state);
             } 
             else if (msg.type === 'piecesUpdate') {
                 let remoteSnapped = false;
@@ -359,7 +375,6 @@
             }
         }
 
-        // Вспомогательная функция отрисовки курсоров игроков
         function updateRemoteCursor(id, color, x, y) {
             let cursorEl = document.getElementById('cursor-' + id);
             if (!cursorEl) {
@@ -371,16 +386,17 @@
         }
 
         // ═══════════════════════════════════════════════════════════
-        // ИГРОВАЯ ЛОГИКА И ОТРИСОВКА ИНТЕРФЕЙСА
+        // ИГРОВАЯ МЕХАНИКА И РЕНДЕР
         // ═══════════════════════════════════════════════════════════
 
         function startGame() {
+            if (!currentRoomId || !isHost) return;
             const file = document.getElementById('imageInput').files[0];
             if (!file) return alert('Выберите картинку!');
             
             const cols = parseInt(document.getElementById('cols').value);
             const rows = parseInt(document.getElementById('rows').value);
-            const showGuide = document.getElementById('showGuide').checked;
+            const showGuide = document.getElementById('showGuide').checked; 
             
             const reader = new FileReader();
             reader.onload = (e) => {
@@ -421,36 +437,34 @@
             reader.readAsDataURL(file);
         }
 
-        function resetGame() { send({ type: 'resetGame' }); }
+        function resetGame() { if(isHost) send({ type: 'resetGame' }); }
 
-        function processFullState(state) {
+        function processStateUpdate(state) {
             gameState = state;
             if (gameState.status === 'playing') {
-                cachedImage.onload = () => renderFullStateHTML();
+                cachedImage.onload = () => renderFullState();
                 cachedImage.src = gameState.image;
             } else {
-                renderFullStateHTML();
+                renderFullState();
             }
         }
 
-        function renderFullStateHTML() {
+        function renderFullState() {
             const panel = document.getElementById('ui-panel');
             const guide = document.getElementById('guide');
             
             if (gameState.status === 'playing') {
                 panel.className = 'playing';
-                document.getElementById('connection-section').style.display = 'none';
                 document.getElementById('setup-section').style.display = 'none';
-                
-                // Панель завершения игры активна только для хоста
-                document.getElementById('playing-section').style.display = isHost ? 'block' : 'none';
+                document.getElementById('playing-section').style.display = 'block';
+                document.getElementById('room-section').style.display = 'none';
+                document.getElementById('room-badge').style.display = 'none';
                 
                 tableX = window.innerWidth / 2 - 2000; tableY = window.innerHeight / 2 - 2000;
                 document.getElementById('table').style.transform = `translate(${tableX}px, ${tableY}px)`;
 
                 if (gameState.showGuide !== false) {
-                    guide.style.display = 'block';
-                    guide.src = gameState.image;
+                    guide.style.display = 'block'; guide.src = gameState.image;
                     guide.style.width = gameState.width + 'px'; guide.style.height = gameState.height + 'px';
                     guide.style.left = (2000 - gameState.width / 2) + 'px'; guide.style.top = (2000 - gameState.height / 2) + 'px';
                 } else {
@@ -462,18 +476,16 @@
             } else {
                 panel.className = 'waiting';
                 
-                if (!peer) {
-                    document.getElementById('connection-section').style.display = 'block';
-                    document.getElementById('setup-section').style.display = 'none';
-                } else if (isHost) {
-                    document.getElementById('connection-section').style.display = 'none';
+                // Отображаем настройки только для хоста
+                if (isHost) {
                     document.getElementById('setup-section').style.display = 'block';
                 } else {
-                    document.getElementById('connection-section').style.display = 'none';
                     document.getElementById('setup-section').style.display = 'none';
                 }
                 
                 document.getElementById('playing-section').style.display = 'none';
+                if (currentRoomId) document.getElementById('room-badge').style.display = 'block';
+                
                 document.querySelectorAll('.piece, .remote-cursor').forEach(el => el.remove());
                 guide.removeAttribute('src');
                 guide.style.display = 'none';
@@ -520,11 +532,8 @@
                 
                 el.onpointerdown = (e) => {
                     e.preventDefault();
-                    if (e.button === 1) { 
-                        detachPiece(id);
-                    } else {
-                        startDraggingPiece(e, id);
-                    }
+                    if (e.button === 1) detachPiece(id);
+                    else startDraggingPiece(e, id);
                 };
                 document.getElementById('table').appendChild(el);
             }
@@ -539,18 +548,13 @@
             
             let isGrouped = false;
             for (let k in gameState.pieces) {
-                if (k != id && gameState.pieces[k].group === piece.group) {
-                    isGrouped = true;
-                    break;
-                }
+                if (k != id && gameState.pieces[k].group === piece.group) { isGrouped = true; break; }
             }
             
             if (isGrouped) {
-                playPickSound(); 
+                playPickSound();
                 piece.group = piece.id; 
-                piece.x += 30; 
-                piece.y += 30;
-                
+                piece.x += 30; piece.y += 30;
                 updatePieceDOM(id);
                 send({ type: 'updatePieces', pieces: [piece] }); 
             }
@@ -595,17 +599,16 @@
                 if (now - lastSendTime > 50) { sendGroupUpdate(); lastSendTime = now; }
             }
 
-            // Передача координат курсора через P2P
-            if (peer && gameState.status === 'playing') {
+            // Синхронизация курсоров
+            if (gameState.status === 'playing' && currentRoomId) {
                 const now = Date.now();
                 if (now - lastCursorSend > 40) { 
                     const localX = e.clientX - tableX; const localY = e.clientY - tableY;
+                    
                     if (isHost) {
-                        broadcastExcept('host', { type: 'cursorUpdate', id: 'host', color: myColor, x: localX, y: localY });
-                    } else {
-                        if (hostConnection && hostConnection.open) {
-                            hostConnection.send({ type: 'cursorMove', x: localX, y: localY });
-                        }
+                        broadcastToGuestsExcept('host', { type: 'cursorUpdate', id: 'host', color: myColor, x: localX, y: localY });
+                    } else if (hostConnection && hostConnection.open) {
+                        hostConnection.send({ type: 'cursorMove', x: localX, y: localY });
                     }
                     lastCursorSend = now;
                 }
@@ -663,9 +666,6 @@
         });
 
         function sendGroupUpdate() { send({ type: 'updatePieces', pieces: Object.keys(initialPiecePositions).map(k => gameState.pieces[k]) }); }
-
-        // Стартовое состояние интерфейса
-        document.getElementById('status').innerHTML = '👋 Выберите: создать комнату или войти к другу по ID';
     </script>
 </body>
 </html>
