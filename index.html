@@ -75,7 +75,11 @@
         <h2>КООПЕРАТИВНЫЕ ПАЗЛЫ</h2>
         <div id="status">👋 Выберите режим игры:</div>
         
-        <div id="room-badge">ID вашей комнаты:<br><strong id="current-room-name" style="color: #f1c40f; font-size: 18px;"></strong></div>
+        <div id="room-badge" style="display: none; margin-bottom: 15px; padding: 10px; background: #2c3e50; border-radius: 4px; font-size: 14px; border: 1px dashed #7f8c8d;">
+            ID комнаты (скопируй его):<br>
+            <input type="text" id="current-room-name" readonly style="width: 100%; margin-top: 5px; background: #1a252f; color: #f1c40f; border: none; text-align: center; cursor: pointer;" onclick="this.select()">
+            <button onclick="copyId()" style="margin-top: 5px; font-size: 10px; padding: 5px;">Копировать ID</button>
+        </div>
         
         <div id="room-section" style="margin-top: 20px;">
             <button class="host-btn" onclick="createRoom()">🏠 Создать комнату (Стать Хостом)</button>
@@ -177,73 +181,73 @@
         // ═══════════════════════════════════════════════════════════
 
         function createRoom() {
-    isHost = true;
-    document.getElementById('status').innerHTML = 'Создание комнаты...';
-    document.getElementById('room-section').style.display = 'none';
-    
-peer = new Peer(null, {
-    host: 'peerjs.com',
-    secure: true,
-    port: 443,
-    path: '/myapp'
-});
-    
-    peer.on('open', (id) => {
-        // id теперь — это длинная случайная строка, которую сгенерировал сервер PeerJS
-        currentRoomId = id; 
-        
-        document.getElementById('status').innerHTML = '🟢 Комната активна! Ожидание игроков...';
-        document.getElementById('room-badge').style.display = 'block';
-        
-        // Отображаем ID, чтобы хост мог скопировать его другу
-        document.getElementById('current-room-name').textContent = currentRoomId;
-        document.getElementById('setup-section').style.display = 'block';
-    });
+            isHost = true;
+            document.getElementById('status').innerHTML = 'Создание комнаты...';
+            document.getElementById('room-section').style.display = 'none';
+            
+            // 1. Генерируем случайный ID сами! (пропускаем заблокированный запрос к серверу)
+            const myRoomId = 'puzzle-' + Math.random().toString(36).substring(2, 12);
+            
+            // 2. Отдаем готовый ID в PeerJS
+            peer = new Peer(myRoomId); 
+            
+            peer.on('open', (id) => {
+                currentRoomId = id; 
+                document.getElementById('status').innerHTML = '🟢 Комната активна! Ожидание игроков...';
+                document.getElementById('room-badge').style.display = 'block';
+                
+                // Вставляем ID в наше новое удобное поле
+                document.getElementById('current-room-name').value = currentRoomId;
+                document.getElementById('setup-section').style.display = 'block';
+            });
 
-    peer.on('connection', (conn) => {
-        // ... (остальной код функции остается без изменений)
-        clientConnections.push(conn);
-        conn.guestId = Math.random().toString(36).substring(2, 9);
-        conn.guestColor = colors[Math.floor(Math.random() * colors.length)];
-        conn.send({ type: 'fullState', state: gameState });
-        
-        conn.on('data', (data) => {
-            handleHostMessage(conn.guestId, conn.guestColor, data);
-        });
-        
-        conn.on('close', () => {
-            clientConnections = clientConnections.filter(c => c !== conn);
-            broadcastExcept(null, { type: 'cursorRemove', id: conn.guestId });
-            const cursorEl = document.getElementById('cursor-' + conn.guestId);
-            if (cursorEl) cursorEl.remove();
-        });
-    });
+            peer.on('connection', (conn) => {
+                clientConnections.push(conn);
+                conn.guestId = Math.random().toString(36).substring(2, 9);
+                conn.guestColor = colors[Math.floor(Math.random() * colors.length)];
+                conn.send({ type: 'fullState', state: gameState });
+                
+                conn.on('data', (data) => {
+                    handleHostMessage(conn.guestId, conn.guestColor, data);
+                });
+                
+                conn.on('close', () => {
+                    clientConnections = clientConnections.filter(c => c !== conn);
+                    broadcastExcept(null, { type: 'cursorRemove', id: conn.guestId });
+                    const cursorEl = document.getElementById('cursor-' + conn.guestId);
+                    if (cursorEl) cursorEl.remove();
+                });
+            });
 
-    peer.on('error', (err) => {
-        alert('Ошибка PeerJS: ' + err.type);
-        location.reload();
-    });
-}
+            peer.on('error', (err) => {
+                alert('Ошибка PeerJS: ' + err.type);
+                location.reload();
+            });
+        }
 
         function joinRoom() {
-            const id = document.getElementById('roomIdInput').value.trim();
-            if (!id) return alert('Введите ID комнаты!');
+            const hostId = document.getElementById('roomIdInput').value.trim();
+            if (!hostId) return alert('Введите ID комнаты!');
             
             isHost = false;
             document.getElementById('status').innerHTML = 'Подключение к хосту...';
             document.getElementById('room-section').style.display = 'none';
             
-            peer = new Peer();
+            // Гостю тоже генерируем ID локально, чтобы избежать ошибки 403
+            const myGuestId = 'guest-' + Math.random().toString(36).substring(2, 12);
+            peer = new Peer(myGuestId);
             
             peer.on('open', () => {
-                hostConnection = peer.connect('puzzlegame-' + id);
+                hostConnection = peer.connect(hostId);
                 
                 hostConnection.on('open', () => {
-                    currentRoomId = id;
+                    currentRoomId = hostId;
                     document.getElementById('status').innerHTML = '🟢 Успешно! Ожидайте запуска игры хостом.';
+                    
+                    // Показываем бейдж с ID комнаты и прячем кнопку сброса
                     document.getElementById('room-badge').style.display = 'block';
-                    document.getElementById('current-room-name').textContent = currentRoomId;
-                    document.getElementById('resetBtn').style.display = 'none'; // Гость не может завершать игру
+                    document.getElementById('current-room-name').value = currentRoomId;
+                    document.getElementById('resetBtn').style.display = 'none'; 
                 });
                 
                 hostConnection.on('data', (msg) => {
