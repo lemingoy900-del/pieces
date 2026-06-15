@@ -182,7 +182,7 @@
     document.getElementById('room-section').style.display = 'none';
     
     // PeerJS сам создаст уникальный ID, если не передавать аргументов
-    peer = new Peer(); 
+    peer = new Peer({ debug: 3 });
     
     peer.on('open', (id) => {
         // id теперь — это длинная случайная строка, которую сгенерировал сервер PeerJS
@@ -630,6 +630,13 @@
 
         function sendGroupUpdate() { send({ type: 'updatePieces', pieces: Object.keys(initialPiecePositions).map(k => gameState.pieces[k]) }); }
 
+
+        function copyId() {
+    const copyText = document.getElementById("current-room-name");
+    copyText.select();
+    document.execCommand("copy");
+    alert("ID скопирован!");
+}
     </script>
 </body>
 </html>
