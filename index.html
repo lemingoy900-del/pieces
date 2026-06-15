@@ -3,63 +3,149 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Карточная Игра (P2P)</title>
+    <title>Кооперативные Пазлы</title>
     <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
     <style>
-        body { 
-            margin: 0; 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #2c3e50; 
-            color: white;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
             overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
             height: 100vh;
         }
-        #ui {
-            position: fixed;
-            top: 20px;
-            left: 20px;
-            background: rgba(0,0,0,0.7);
+
+        h1 {
+            color: white;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .controls {
+            background: rgba(255,255,255,0.95);
             padding: 20px;
             border-radius: 10px;
-            z-index: 1000;
-            min-width: 300px;
-        }
-        input, button {
-            padding: 10px;
-            margin: 5px 0;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            max-width: 600px;
             width: 100%;
-            box-sizing: border-box;
-            border-radius: 5px;
-            border: 1px solid #555;
-            background: #34495e;
-            color: white;
         }
-        button {
-            background: #27ae60;
-            cursor: pointer;
-            border: none;
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
             font-weight: bold;
+            color: #333;
         }
-        button:hover { background: #2ecc71; }
-        button:disabled { background: #555; cursor: not-allowed; }
-        
-        #status { margin-top: 10px; font-size: 14px; color: #f1c40f; }
-        
+
+        input[type="file"],
+        input[type="number"],
+        input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #5568d3;
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .number-inputs {
+            display: flex;
+            gap: 10px;
+        }
+
+        .number-inputs input {
+            width: 80px;
+        }
+
+        #game-area {
+            position: relative;
+            background: rgba(255,255,255,0.9);
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .puzzle-piece {
+            position: absolute;
+            cursor: move;
+            user-select: none;
+            transition: box-shadow 0.2s;
+        }
+
+        .puzzle-piece:hover {
+            box-shadow: 0 0 10px rgba(0,0,0,0.3);
+        }
+
+        .puzzle-piece.dragging {
+            opacity: 0.7;
+            z-index: 1000;
+        }
+
+        .guide-image {
+            position: absolute;
+            opacity: 0.2;
+            pointer-events: none;
+        }
+
         .cursor {
             position: absolute;
             width: 20px;
             height: 20px;
             border-radius: 50%;
             pointer-events: none;
-            transition: transform 0.1s linear;
             border: 2px solid white;
             z-index: 999;
+            transition: transform 0.1s linear;
         }
-        
+
         .cursor-label {
             position: absolute;
             font-size: 12px;
-            background: rgba(0,0,0,0.5);
+            background: rgba(0,0,0,0.7);
+            color: white;
             padding: 2px 5px;
             border-radius: 3px;
             top: -20px;
@@ -67,203 +153,484 @@
             white-space: nowrap;
         }
 
-        #game-area {
-            width: 100vw;
-            height: 100vh;
-            position: relative;
+        #status {
+            background: rgba(255,255,255,0.95);
+            padding: 10px 20px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            font-weight: bold;
+            color: #333;
         }
-        
-        .hidden { display: none !important; }
+
+        .hidden {
+            display: none !important;
+        }
+
+        #room-info {
+            background: rgba(255,255,255,0.95);
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            max-width: 600px;
+            width: 100%;
+        }
+
+        #room-info p {
+            margin: 5px 0;
+        }
+
+        #room-id-display {
+            font-family: monospace;
+            font-size: 18px;
+            color: #667eea;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
-
-<div id="ui">
-    <h2>🎴 Карточная Игра</h2>
-    <div id="menu">
-        <p><strong>Хост:</strong></p>
-        <button id="btn-create">Создать комнату</button>
+    <div class="container">
+        <h1>🧩 КООПЕРАТИВНЫЕ ПАЗЛЫ</h1>
         
-        <p style="margin-top: 15px;"><strong>Игрок:</strong></p>
-        <input type="text" id="room-id" placeholder="Введите ID комнаты">
-        <button id="btn-join">Присоединиться</button>
+        <div id="status">🔴 Подключение...</div>
+
+        <div id="connection-panel">
+            <div class="controls">
+                <div class="control-group">
+                    <button id="btn-create" onclick="createRoom()">Создать комнату</button>
+                </div>
+                <div class="control-group">
+                    <label>Или присоединиться к комнате:</label>
+                    <input type="text" id="join-room-id" placeholder="Введите ID комнаты">
+                    <button onclick="joinRoom()">Присоединиться</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="room-info" class="hidden">
+            <p><strong>ID комнаты:</strong> <span id="room-id-display"></span></p>
+            <p style="font-size: 14px; color: #666;">Отправьте этот ID друзьям для подключения</p>
+            <button onclick="leaveRoom()" style="background: #e74c3c;">Выйти из комнаты</button>
+        </div>
+
+        <div id="game-controls" class="controls hidden">
+            <div class="control-group">
+                <label>🖼️ Выбрать изображение</label>
+                <input type="file" id="image-input" accept="image/*">
+            </div>
+            <div class="control-group checkbox-group">
+                <input type="checkbox" id="show-guide" checked>
+                <label for="show-guide" style="margin: 0;">Показывать подсказку на фоне</label>
+            </div>
+            <div class="control-group">
+                <label>Размер сетки:</label>
+                <div class="number-inputs">
+                    <div>
+                        <label style="font-size: 12px;">Колонки:</label>
+                        <input type="number" id="cols-input" value="4" min="2" max="10">
+                    </div>
+                    <div>
+                        <label style="font-size: 12px;">Строки:</label>
+                        <input type="number" id="rows-input" value="3" min="2" max="10">
+                    </div>
+                </div>
+            </div>
+            <button id="btn-start" onclick="startGame()" disabled>Нарезать и начать</button>
+            <button onclick="resetGame()" style="background: #e74c3c;">Завершить игру</button>
+        </div>
+
+        <div id="game-area" class="hidden"></div>
     </div>
 
-    <div id="room-info" class="hidden">
-        <p><strong>ID комнаты:</strong> <span id="my-id" style="color: #2ecc71; font-family: monospace;"></span></p>
-        <p style="font-size: 12px; color: #bbb;">Отправьте этот ID другу, чтобы он подключился.</p>
-        <p><strong>Статус:</strong> <span id="status">Ожидание...</span></p>
-        <button id="btn-disconnect" style="background: #c0392b;">Выйти</button>
-    </div>
-</div>
+    <script>
+        // ═══════════════════════════════════════════════════════
+        // ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
+        // ═══════════════════════════════════════════════════════
+        let peer = null;
+        let connections = [];
+        let isHost = false;
+        let myId = null;
+        let myColor = '#' + Math.floor(Math.random()*16777215).toString(16);
 
-<div id="game-area"></div>
+        let gameState = {
+            status: 'waiting',
+            image: null,
+            width: 0,
+            height: 0,
+            cols: 0,
+            rows: 0,
+            pieces: {},
+            showGuide: true
+        };
 
-<script>
-    let peer = null;
-    let connections = []; // Храним все активные соединения
-    let myColor = '#' + Math.floor(Math.random()*16777215).toString(16);
-    let isHost = false;
+        let selectedImage = null;
+        let puzzlePieces = [];
 
-    const uiMenu = document.getElementById('menu');
-    const uiRoomInfo = document.getElementById('room-info');
-    const myIdSpan = document.getElementById('my-id');
-    const statusSpan = document.getElementById('status');
-    const gameArea = document.getElementById('game-area');
+        // ═══════════════════════════════════════════════════════
+        // ИНИЦИАЛИЗАЦИЯ PEERJS
+        // ═══════════════════════════════════════════════════════
+        function initPeer(id = null) {
+            peer = new Peer(id);
 
-    // Генерация короткого ID для комнаты
-    function generateRoomId() {
-        return Math.random().toString(36).substring(2, 8).toUpperCase();
-    }
+            peer.on('open', (id) => {
+                myId = id;
+                document.getElementById('status').textContent = '✅ Подключено';
+                document.getElementById('status').style.color = '#27ae60';
+            });
 
-    // ═══════════════════════════════════════════════════════
-    // СОЗДАНИЕ КОМНАТЫ (ХОСТ)
-    // ═══════════════════════════════════════════════════════
-    document.getElementById('btn-create').onclick = () => {
-        isHost = true;
-        const roomId = generateRoomId();
-        initPeer(roomId);
-    };
+            peer.on('connection', (conn) => {
+                handleConnection(conn);
+            });
 
-    // ═══════════════════════════════════════════════════════
-    // ПРИСОЕДИНЕНИЕ (КЛИЕНТ)
-    // ═══════════════════════════════════════════════════════
-    document.getElementById('btn-join').onclick = () => {
-        const roomId = document.getElementById('room-id').value.trim().toUpperCase();
-        if (!roomId) return alert('Введите ID комнаты');
-        isHost = false;
-        initPeer(null, roomId);
-    };
+            peer.on('error', (err) => {
+                console.error('PeerJS error:', err);
+                document.getElementById('status').textContent = '❌ Ошибка: ' + err.type;
+                document.getElementById('status').style.color = '#e74c3c';
+            });
+        }
 
-    document.getElementById('btn-disconnect').onclick = () => {
-        location.reload();
-    };
-
-    // ═══════════════════════════════════════════════════════
-    // ИНИЦИАЛИЗАЦИЯ PEERJS
-    // ═══════════════════════════════════════════════════════
-    function initPeer(asHost, connectTo) {
-        // Если мы хост, то создаем Peer с заданным ID.
-        // Если клиент, то создаем Peer со случайным ID.
-        const peerId = asHost ? asHost : undefined;
-        
-        peer = new Peer(peerId);
-
-        peer.on('open', (id) => {
-            uiMenu.classList.add('hidden');
-            uiRoomInfo.classList.remove('hidden');
-            myIdSpan.textContent = id;
-            statusSpan.textContent = 'Ожидание игроков...';
-
-            if (connectTo) {
-                statusSpan.textContent = 'Подключение...';
-                connectToPeer(connectTo);
-            }
-        });
-
-        // Обработка входящих соединений (для Хоста)
-        peer.on('connection', (conn) => {
-            handleConnection(conn);
-        });
-
-        peer.on('error', (err) => {
-            console.error('PeerJS error:', err);
-            statusSpan.textContent = 'Ошибка: ' + err.type;
-            if (err.type === 'unavailable-id') {
-                alert('Этот ID уже занят. Попробуйте снова.');
-                location.reload();
-            } else if (err.type === 'peer-unavailable') {
-                alert('Комната не найдена. Проверьте ID.');
-                location.reload();
-            }
-        });
-    }
-
-    function connectToPeer(targetId) {
-        const conn = peer.connect(targetId, { reliable: true });
-        handleConnection(conn);
-    }
-
-    // ═══════════════════════════════════════════════════════
-    // ОБРАБОТКА СОЕДИНЕНИЙ
-    // ═══════════════════════════════════════════════════════
-    function handleConnection(conn) {
-        conn.on('open', () => {
-            connections.push(conn);
-            statusSpan.textContent = `Подключено игроков: ${connections.length}`;
+        // ═══════════════════════════════════════════════════════
+        // СОЗДАНИЕ И ПРИСОЕДИНЕНИЕ К КОМНАТЕ
+        // ═══════════════════════════════════════════════════════
+        function createRoom() {
+            isHost = true;
+            initPeer();
             
-            // Отправляем приветственный пакет с нашим цветом
-            sendTo(conn, { type: 'hello', color: myColor });
+            setTimeout(() => {
+                document.getElementById('connection-panel').classList.add('hidden');
+                document.getElementById('room-info').classList.remove('hidden');
+                document.getElementById('room-id-display').textContent = myId;
+                document.getElementById('game-controls').classList.remove('hidden');
+            }, 500);
+        }
+
+        function joinRoom() {
+            const roomId = document.getElementById('join-room-id').value.trim();
+            if (!roomId) {
+                alert('Введите ID комнаты');
+                return;
+            }
+
+            isHost = false;
+            initPeer();
+
+            setTimeout(() => {
+                const conn = peer.connect(roomId);
+                handleConnection(conn);
+                
+                document.getElementById('connection-panel').classList.add('hidden');
+                document.getElementById('room-info').classList.remove('hidden');
+                document.getElementById('room-id-display').textContent = roomId;
+                document.getElementById('game-controls').classList.remove('hidden');
+            }, 500);
+        }
+
+        function leaveRoom() {
+            location.reload();
+        }
+
+        // ═══════════════════════════════════════════════════════
+        // ОБРАБОТКА СОЕДИНЕНИЙ
+        // ═══════════════════════════════════════════════════════
+        function handleConnection(conn) {
+            conn.on('open', () => {
+                connections.push(conn);
+                console.log('Игрок подключился:', conn.peer);
+                
+                // Отправляем приветствие
+                send(conn, { type: 'hello', color: myColor });
+                
+                // Если мы хост, отправляем текущее состояние
+                if (isHost) {
+                    send(conn, { type: 'fullState', state: gameState });
+                }
+            });
+
+            conn.on('data', (data) => {
+                handleMessage(conn, data);
+            });
+
+            conn.on('close', () => {
+                connections = connections.filter(c => c !== conn);
+                console.log('Игрок отключился:', conn.peer);
+                const cursor = document.getElementById('cursor-' + conn.peer);
+                if (cursor) cursor.remove();
+            });
+        }
+
+        function send(conn, data) {
+            if (conn && conn.open) {
+                conn.send(data);
+            }
+        }
+
+        function broadcast(data) {
+            connections.forEach(conn => send(conn, data));
+        }
+
+        function broadcastExcept(exceptConn, data) {
+            connections.forEach(conn => {
+                if (conn !== exceptConn) send(conn, data);
+            });
+        }
+
+        // ═══════════════════════════════════════════════════════
+        // ОБРАБОТКА СООБЩЕНИЙ
+        // ═══════════════════════════════════════════════════════
+        function handleMessage(conn, data) {
+            console.log('Received:', data);
+
+            if (data.type === 'hello') {
+                createCursor(conn.peer, data.color);
+            }
+            else if (data.type === 'fullState') {
+                gameState = data.state;
+                if (gameState.status === 'playing') {
+                    renderPuzzle();
+                }
+            }
+            else if (data.type === 'gameStarted') {
+                gameState = data.state;
+                renderPuzzle();
+            }
+            else if (data.type === 'piecesUpdate') {
+                data.pieces.forEach(p => {
+                    if (gameState.pieces[p.id]) {
+                        gameState.pieces[p.id].x = p.x;
+                        gameState.pieces[p.id].y = p.y;
+                        gameState.pieces[p.id].group = p.group;
+                    }
+                });
+                updatePiecesPositions();
+            }
+            else if (data.type === 'cursorMove') {
+                updateCursor(conn.peer, data.x, data.y);
+            }
+            else if (data.type === 'gameReset') {
+                resetGameUI();
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════
+        // ЗАГРУЗКА ИЗОБРАЖЕНИЯ
+        // ═══════════════════════════════════════════════════════
+        document.getElementById('image-input').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                selectedImage = event.target.result;
+                document.getElementById('btn-start').disabled = false;
+            };
+            reader.readAsDataURL(file);
         });
 
-        conn.on('data', (data) => {
-            handleMessage(conn, data);
+        // ═══════════════════════════════════════════════════════
+        // ЗАПУСК ИГРЫ
+        // ═══════════════════════════════════════════════════════
+        function startGame() {
+            if (!selectedImage) {
+                alert('Выберите изображение');
+                return;
+            }
+
+            const cols = parseInt(document.getElementById('cols-input').value);
+            const rows = parseInt(document.getElementById('rows-input').value);
+            const showGuide = document.getElementById('show-guide').checked;
+
+            const img = new Image();
+            img.onload = () => {
+                const width = img.width;
+                const height = img.height;
+                const pieceWidth = width / cols;
+                const pieceHeight = height / rows;
+
+                gameState = {
+                    status: 'playing',
+                    image: selectedImage,
+                    width: width,
+                    height: height,
+                    cols: cols,
+                    rows: rows,
+                    pieces: {},
+                    showGuide: showGuide
+                };
+
+                // Создаем кусочки пазла
+                for (let row = 0; row < rows; row++) {
+                    for (let col = 0; col < cols; col++) {
+                        const id = `piece_${row}_${col}`;
+                        gameState.pieces[id] = {
+                            id: id,
+                            x: Math.random() * (width - pieceWidth),
+                            y: Math.random() * (height - pieceHeight),
+                            group: null,
+                            row: row,
+                            col: col
+                        };
+                    }
+                }
+
+                if (isHost) {
+                    broadcast({ type: 'gameStarted', state: gameState });
+                }
+                
+                renderPuzzle();
+            };
+            img.src = selectedImage;
+        }
+
+        // ═══════════════════════════════════════════════════════
+        // РЕНДЕРИНГ ПАЗЛА
+        // ═══════════════════════════════════════════════════════
+        function renderPuzzle() {
+            const gameArea = document.getElementById('game-area');
+            gameArea.innerHTML = '';
+            gameArea.classList.remove('hidden');
+            gameArea.style.width = gameState.width + 'px';
+            gameArea.style.height = gameState.height + 'px';
+
+            const pieceWidth = gameState.width / gameState.cols;
+            const pieceHeight = gameState.height / gameState.rows;
+
+            // Показываем подсказку
+            if (gameState.showGuide) {
+                const guide = document.createElement('img');
+                guide.src = gameState.image;
+                guide.className = 'guide-image';
+                guide.style.width = gameState.width + 'px';
+                guide.style.height = gameState.height + 'px';
+                gameArea.appendChild(guide);
+            }
+
+            // Создаем кусочки
+            puzzlePieces = [];
+            Object.values(gameState.pieces).forEach(piece => {
+                const pieceEl = document.createElement('div');
+                pieceEl.className = 'puzzle-piece';
+                pieceEl.id = piece.id;
+                pieceEl.style.width = pieceWidth + 'px';
+                pieceEl.style.height = pieceHeight + 'px';
+                pieceEl.style.left = piece.x + 'px';
+                pieceEl.style.top = piece.y + 'px';
+                pieceEl.style.backgroundImage = `url(${gameState.image})`;
+                pieceEl.style.backgroundPosition = `-${piece.col * pieceWidth}px -${piece.row * pieceHeight}px`;
+                pieceEl.style.backgroundSize = `${gameState.width}px ${gameState.height}px`;
+
+                makeDraggable(pieceEl, piece);
+                gameArea.appendChild(pieceEl);
+                puzzlePieces.push({ el: pieceEl, data: piece });
+            });
+        }
+
+        function updatePiecesPositions() {
+            puzzlePieces.forEach(({ el, data }) => {
+                const piece = gameState.pieces[data.id];
+                if (piece) {
+                    el.style.left = piece.x + 'px';
+                    el.style.top = piece.y + 'px';
+                }
+            });
+        }
+
+        // ═══════════════════════════════════════════════════════
+        // DRAG AND DROP
+        // ═══════════════════════════════════════════════════════
+        function makeDraggable(el, piece) {
+            let isDragging = false;
+            let startX, startY, initialX, initialY;
+
+            el.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                el.classList.add('dragging');
+                startX = e.clientX;
+                startY = e.clientY;
+                initialX = piece.x;
+                initialY = piece.y;
+                e.preventDefault();
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+
+                const dx = e.clientX - startX;
+                const dy = e.clientY - startY;
+                
+                piece.x = Math.max(0, Math.min(gameState.width - el.offsetWidth, initialX + dx));
+                piece.y = Math.max(0, Math.min(gameState.height - el.offsetHeight, initialY + dy));
+                
+                el.style.left = piece.x + 'px';
+                el.style.top = piece.y + 'px';
+
+                // Отправляем обновление позиции
+                broadcast({
+                    type: 'piecesUpdate',
+                    pieces: [{ id: piece.id, x: piece.x, y: piece.y, group: piece.group }]
+                });
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (isDragging) {
+                    isDragging = false;
+                    el.classList.remove('dragging');
+                }
+            });
+        }
+
+        // ═══════════════════════════════════════════════════════
+        // СБРОС ИГРЫ
+        // ═══════════════════════════════════════════════════════
+        function resetGame() {
+            gameState = {
+                status: 'waiting',
+                image: null,
+                width: 0,
+                height: 0,
+                cols: 0,
+                rows: 0,
+                pieces: {},
+                showGuide: true
+            };
+
+            if (isHost) {
+                broadcast({ type: 'gameReset' });
+            }
+
+            resetGameUI();
+        }
+
+        function resetGameUI() {
+            document.getElementById('game-area').classList.add('hidden');
+            document.getElementById('game-area').innerHTML = '';
+            document.getElementById('btn-start').disabled = true;
+            document.getElementById('image-input').value = '';
+            selectedImage = null;
+        }
+
+        // ═══════════════════════════════════════════════════════
+        // КУРСОРЫ
+        // ═══════════════════════════════════════════════════════
+        function createCursor(id, color) {
+            const cursor = document.createElement('div');
+            cursor.className = 'cursor';
+            cursor.id = 'cursor-' + id;
+            cursor.style.backgroundColor = color;
+            cursor.innerHTML = '<div class="cursor-label">Игрок</div>';
+            document.body.appendChild(cursor);
+        }
+
+        function updateCursor(id, x, y) {
+            const cursor = document.getElementById('cursor-' + id);
+            if (cursor) {
+                cursor.style.transform = `translate(${x}px, ${y}px)`;
+            }
+        }
+
+        document.addEventListener('mousemove', (e) => {
+            if (connections.length > 0) {
+                broadcast({ type: 'cursorMove', x: e.clientX, y: e.clientY });
+            }
         });
-
-        conn.on('close', () => {
-            connections = connections.filter(c => c !== conn);
-            statusSpan.textContent = `Подключено игроков: ${connections.length}`;
-            // Удаляем курсор игрока
-            const cursorEl = document.getElementById('cursor-' + conn.peer);
-            if (cursorEl) cursorEl.remove();
-        });
-    }
-
-    // ═══════════════════════════════════════════════════════
-    // ОБРАБОТКА СООБЩЕНИЙ
-    // ═══════════════════════════════════════════════════════
-    function handleMessage(conn, data) {
-        // console.log('Received:', data);
-        
-        if (data.type === 'hello') {
-            createCursor(conn.peer, data.color);
-        } 
-        else if (data.type === 'cursor') {
-            updateCursor(conn.peer, data.x, data.y);
-        }
-        else if (data.type === 'chat') {
-            console.log(`[Chat] ${data.text}`);
-        }
-    }
-
-    // Отправка данных конкретному пиру
-    function sendTo(conn, data) {
-        if (conn && conn.open) conn.send(data);
-    }
-
-    // Broadcast всем подключенным
-    function broadcast(data) {
-        connections.forEach(conn => {
-            if (conn.open) conn.send(data);
-        });
-    }
-
-    // ═══════════════════════════════════════════════════════
-    // КУРСОРЫ (демонстрация синхронизации)
-    // ═══════════════════════════════════════════════════════
-    function createCursor(id, color) {
-        const el = document.createElement('div');
-        el.className = 'cursor';
-        el.id = 'cursor-' + id;
-        el.style.backgroundColor = color;
-        el.innerHTML = `<div class="cursor-label">Player</div>`;
-        document.body.appendChild(el);
-    }
-
-    function updateCursor(id, x, y) {
-        const el = document.getElementById('cursor-' + id);
-        if (el) {
-            el.style.transform = `translate(${x}px, ${y}px)`;
-        }
-    }
-
-    // Отправка своего курсора
-    document.addEventListener('mousemove', (e) => {
-        if (connections.length > 0) {
-            broadcast({ type: 'cursor', x: e.clientX, y: e.clientY });
-        }
-    });
-
-</script>
+    </script>
 </body>
 </html>
