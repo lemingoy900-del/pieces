@@ -177,49 +177,49 @@
         // ═══════════════════════════════════════════════════════════
 
         function createRoom() {
-            isHost = true;
-            document.getElementById('status').innerHTML = 'Создание комнаты...';
-            document.getElementById('room-section').style.display = 'none';
-            
-            // Генерируем ID (цифры для удобства ввода)
-            const roomId = Math.floor(10000 + Math.random() * 90000).toString();
-            peer = new Peer('puzzlegame-' + roomId);
-            
-            peer.on('open', (id) => {
-                currentRoomId = roomId;
-                document.getElementById('status').innerHTML = '🟢 Комната активна! Ожидание игроков...';
-                document.getElementById('room-badge').style.display = 'block';
-                document.getElementById('current-room-name').textContent = currentRoomId;
-                document.getElementById('setup-section').style.display = 'block';
-            });
+    isHost = true;
+    document.getElementById('status').innerHTML = 'Создание комнаты...';
+    document.getElementById('room-section').style.display = 'none';
+    
+    // PeerJS сам создаст уникальный ID, если не передавать аргументов
+    peer = new Peer(); 
+    
+    peer.on('open', (id) => {
+        // id теперь — это длинная случайная строка, которую сгенерировал сервер PeerJS
+        currentRoomId = id; 
+        
+        document.getElementById('status').innerHTML = '🟢 Комната активна! Ожидание игроков...';
+        document.getElementById('room-badge').style.display = 'block';
+        
+        // Отображаем ID, чтобы хост мог скопировать его другу
+        document.getElementById('current-room-name').textContent = currentRoomId;
+        document.getElementById('setup-section').style.display = 'block';
+    });
 
-            peer.on('connection', (conn) => {
-                clientConnections.push(conn);
-                
-                // Эмуляция сервера: выдаем гостю ID и Цвет
-                conn.guestId = Math.random().toString(36).substring(2, 9);
-                conn.guestColor = colors[Math.floor(Math.random() * colors.length)];
+    peer.on('connection', (conn) => {
+        // ... (остальной код функции остается без изменений)
+        clientConnections.push(conn);
+        conn.guestId = Math.random().toString(36).substring(2, 9);
+        conn.guestColor = colors[Math.floor(Math.random() * colors.length)];
+        conn.send({ type: 'fullState', state: gameState });
+        
+        conn.on('data', (data) => {
+            handleHostMessage(conn.guestId, conn.guestColor, data);
+        });
+        
+        conn.on('close', () => {
+            clientConnections = clientConnections.filter(c => c !== conn);
+            broadcastExcept(null, { type: 'cursorRemove', id: conn.guestId });
+            const cursorEl = document.getElementById('cursor-' + conn.guestId);
+            if (cursorEl) cursorEl.remove();
+        });
+    });
 
-                // Отправляем текущее состояние новому игроку
-                conn.send({ type: 'fullState', state: gameState });
-
-                conn.on('data', (data) => {
-                    handleHostMessage(conn.guestId, conn.guestColor, data);
-                });
-
-                conn.on('close', () => {
-                    clientConnections = clientConnections.filter(c => c !== conn);
-                    broadcastExcept(null, { type: 'cursorRemove', id: conn.guestId });
-                    const cursorEl = document.getElementById('cursor-' + conn.guestId);
-                    if (cursorEl) cursorEl.remove();
-                });
-            });
-
-            peer.on('error', (err) => {
-                alert('Ошибка создания комнаты. Возможно ID занят, попробуйте еще раз.');
-                location.reload();
-            });
-        }
+    peer.on('error', (err) => {
+        alert('Ошибка PeerJS: ' + err.type);
+        location.reload();
+    });
+}
 
         function joinRoom() {
             const id = document.getElementById('roomIdInput').value.trim();
