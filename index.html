@@ -181,8 +181,12 @@
     document.getElementById('status').innerHTML = 'Создание комнаты...';
     document.getElementById('room-section').style.display = 'none';
     
-    // PeerJS сам создаст уникальный ID, если не передавать аргументов
-    peer = new Peer({ debug: 3 });
+peer = new Peer(null, {
+    host: 'peerjs.com',
+    secure: true,
+    port: 443,
+    path: '/myapp'
+});
     
     peer.on('open', (id) => {
         // id теперь — это длинная случайная строка, которую сгенерировал сервер PeerJS
